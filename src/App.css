@@ -615,6 +615,16 @@ button { font: inherit; }
 .course-category--annex { --course-fill: #cfe2f3; --course-ink: #17476e; }
 .course-category--school { --course-fill: #d9ead3; --course-ink: #2d582b; }
 .course-category--technical { --course-fill: #234f7d; --course-ink: #fff; }
+.course-category--busan-basic { --course-fill: #fff0c7; --course-ink: #9c320f; }
+.course-category--busan-theory { --course-fill: #e2efd4; --course-ink: #3d652b; }
+.course-category--busan-practice { --course-fill: #dfbee5; --course-ink: #56216c; }
+.course-category--busan-career { --course-fill: #b5e3df; --course-ink: #104779; }
+.calendar-cell-lesson[class*="course-category--busan-"] {
+  padding: 4px;
+  border-radius: 5px;
+  background: var(--course-fill);
+  color: var(--course-ink);
+}
 .course-category, .calendar-mini .calendar-day[class*="course-category--"] {
   background: var(--course-fill);
   color: var(--course-ink);

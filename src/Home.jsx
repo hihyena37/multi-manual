@@ -9,7 +9,8 @@ import SortableChecklist from './SortableChecklist'
 import { checklistOrderKey, loadChecklistOrder, mergeChecklistOrder } from './checklistOrder'
 import { eventsOnDate, loadEvents } from './calendarEvents'
 import { courseSheetSchedule } from './courseSheetSchedule'
-import { cohortLabel, gumiCohortId } from './courses'
+import { busanCategoryOn, busanCourseCategories, busanLessonOn } from './busanCourseSheet'
+import { busanCohortId, cohortLabel, gumiCohortId } from './courses'
 import { attendanceDocuments, dailyTasks, periodTasks, weekdayOrder, weekdays, weeklyTasks, weekRange } from './routineTasks'
 import { occursOn, repeatOptions, shiftDate } from './dateRecurrence'
 
@@ -285,9 +286,12 @@ export default function Home({ course, cohort }) {
   const today = dateKey.format(now)
   const todayEvents = eventsOnDate(events, today, cohort?.id)
   const period = todayEvents.find((event) => event.cohortId && event.days)
-  const lesson = cohort?.id === gumiCohortId ? courseSheetSchedule[today] : undefined
+  const busanCategory = cohort?.id === busanCohortId
+    ? busanCourseCategories.find(({ key }) => key === busanCategoryOn(today))?.label : undefined
+  const lesson = cohort?.id === busanCohortId ? [busanCategory, busanLessonOn(today)].filter(Boolean).join('\n')
+    : cohort?.id === gumiCohortId ? courseSheetSchedule[today] : undefined
   const schedule = todayEvents.filter((event) => !event.days).map(({ id, title }) => ({ id, title, badge: '캘린더 일정', Icon: CalendarDays }))
-  if (lesson) schedule.unshift({ id: 'hvac-2-sheet', title: lesson, badge: '캘린더 일정', Icon: GraduationCap })
+  if (lesson) schedule.unshift({ id: `${cohort.id}-sheet`, title: lesson, badge: '캘린더 일정', Icon: GraduationCap })
   const scope = cohort?.id ?? 'common'
   function scopedItems(items, prefix, includeCustom = false) {
     if (!cohort) return []

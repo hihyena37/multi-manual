@@ -1,3 +1,6 @@
+import { busanCategoryOn, busanCourseCategories } from './busanCourseSheet.js'
+import { busanCohortId, gumiCohortId } from './courses.js'
+
 // Date-header fills from the Gumi HVAC calendar. The dark blue cells contain
 // technical lessons, but the sheet legend does not specify a venue for that fill.
 const groups = [
@@ -7,7 +10,13 @@ const groups = [
   { key: 'technical', label: '직무특화', dates: '11-19 12-03 12-23 12-30 01-04 01-05 01-06 01-07 01-08 01-11 01-12 01-13 01-15 01-18 01-19 01-20 02-10 02-11 02-12 02-15 02-16 02-17 02-18 02-19 02-22 02-23 02-24 02-25 02-26 03-02 03-03 03-04 03-05 03-08 03-09 03-10 03-11 03-12' },
 ]
 
-export const courseSheetCategories = groups.map(({ key, label }) => ({ key, label }))
+const gumiCategories = groups.map(({ key, label }) => ({ key, label }))
+export const courseSheetCategories = [...gumiCategories, ...busanCourseCategories]
+
+export function categoriesForCohort(cohortId) {
+  if (cohortId === '*') return courseSheetCategories
+  return cohortId === busanCohortId ? busanCourseCategories : gumiCategories
+}
 
 const byDate = new Map(groups.flatMap(({ key, label, dates }) => dates.split(' ').map((date) => [
   `${date >= '10' ? '2026' : '2027'}-${date}`, { key, label },
@@ -16,7 +25,6 @@ const byDate = new Map(groups.flatMap(({ key, label, dates }) => dates.split(' '
 export function courseSheetCategoryOn(date) {
   return byDate.get(date)
 }
-import { gumiCohortId } from './courses.js'
 
 
 export const categoryEditsKey = 'work-manual.calendar-categories.v1'
@@ -34,7 +42,8 @@ export function loadCategoryEdits() {
 export function categorySettingsOn(edits, cohortId, date) {
   return edits[`${cohortId}:${date}`] ?? {
     mode: 'day',
-    day: cohortId === gumiCohortId ? courseSheetCategoryOn(date)?.key ?? '' : '',
+    day: cohortId === busanCohortId ? busanCategoryOn(date)
+      : cohortId === gumiCohortId ? courseSheetCategoryOn(date)?.key ?? '' : '',
   }
 }
 

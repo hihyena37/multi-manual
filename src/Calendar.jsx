@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { courseSheetSchedule } from './courseSheetSchedule'
-import { categoryEditsKey, categorySettingsOn, categorySlots, courseSheetCategories, loadCategoryEdits } from './courseSheetCategories'
+import { categoriesForCohort, categoryEditsKey, categorySettingsOn, categorySlots, loadCategoryEdits } from './courseSheetCategories'
+import { busanCourseNotes, busanLessonOn } from './busanCourseSheet'
 import { calendarStorageKey, eventsOnDate, loadEvents } from './calendarEvents'
-import { cohortLabel, gumiCohortId } from './courses'
+import { busanCohortId, cohortLabel, gumiCohortId } from './courses'
 import { repeatOptions, shiftDate } from './dateRecurrence'
 
 const weekdays = ['일', '월', '화', '수', '목', '금', '토']
@@ -33,7 +34,7 @@ function CategoryBadges({ slots }) {
   </div>
 }
 
-function CategoryEditor({ date, initial, canReset, save, reset, close, addEvent }) {
+function CategoryEditor({ date, initial, categories, canReset, save, reset, close, addEvent }) {
   const [mode, setMode] = useState(initial.mode)
   const modeSelect = useRef(null)
   useEffect(() => { modeSelect.current?.focus() }, [])
@@ -41,7 +42,7 @@ function CategoryEditor({ date, initial, canReset, save, reset, close, addEvent 
   function categorySelect(name, label, value) {
     return <label>{label}<select name={name} defaultValue={value ?? ''}>
       <option value="">구분 없음</option>
-      {courseSheetCategories.map(({ key, label: option }) => <option key={key} value={key}>{option}</option>)}
+      {categories.map(({ key, label: option }) => <option key={key} value={key}>{option}</option>)}
     </select></label>
   }
 
@@ -189,19 +190,20 @@ export default function Calendar({ mini = false, course, cohort, courses = [], t
     : view === 'week' ? `${firstOfWeek} ~ ${dates[6]}` : focusDate
   const fullLink = `#/calendar?month=${month}`
   const hasCourseSheet = filter === gumiCohortId || filter === '*'
+  const notes = filter === busanCohortId ? busanCourseNotes : hasCourseSheet ? sheetDates : {}
+  const lessonOn = (date, id = filter) => id === busanCohortId ? busanLessonOn(date)
+    : id === gumiCohortId || id === '*' ? courseSheetSchedule[date] : undefined
   const cohorts = courses.flatMap((item) => item.cohorts.map((group) => ({ id: group.id, label: `${item.name} ${cohortLabel(group)}` })))
-  const monthNotes = hasCourseSheet
-    ? Object.entries(sheetDates).filter(([date]) => date.startsWith(month))
-    : []
+  const monthNotes = Object.entries(notes).filter(([date]) => date.startsWith(month))
   const categoriesOn = (date, id = filter) => categorySlots(categorySettingsOn(categoryEdits, id, date))
   const monthLessons = mini ? monthDates(month).flatMap((date) => {
     if (!date.startsWith(month)) return []
-    const lesson = hasCourseSheet ? courseSheetSchedule[date] : undefined
+    const lesson = lessonOn(date)
     const slots = categoriesOn(date)
     return lesson || slots.length ? [{ date, lesson, slots }] : []
   }) : []
-  const todayLesson = mini && hasCourseSheet && today.slice(0, 7) === month
-    ? courseSheetSchedule[today]
+  const todayLesson = mini && today.slice(0, 7) === month
+    ? lessonOn(today)
     : undefined
   const todayCategories = mini && today.startsWith(month) ? categoriesOn(today) : []
   const activeCategoryKey = `${filter}:${categoryDate}`
@@ -283,7 +285,7 @@ export default function Calendar({ mini = false, course, cohort, courses = [], t
         </select></label>
       </div>}
       {(filter && (!mini || monthLessons.some(({ slots }) => slots.length > 0))) && <div className="calendar-category-legend" aria-label="교육일 구분">
-        {courseSheetCategories.map((category) => <CourseCategory key={category.key} category={category} />)}
+        {categoriesForCohort(filter).map((category) => <CourseCategory key={category.key} category={category} />)}
       </div>}
       <div className="calendar-scroll">
       <div className={`calendar-grid calendar-grid--${view}`}>
@@ -293,12 +295,14 @@ export default function Calendar({ mini = false, course, cohort, courses = [], t
             .filter((event) => !event.days || date === event.start || date === event.end)
           const periodMarkers = matches.filter((event) => event.days).map((event) => eventLabel(event, date))
           const day = Number(date.slice(-2))
-          const note = hasCourseSheet ? sheetDates[date] : undefined
-          const lesson = hasCourseSheet ? courseSheetSchedule[date] : undefined
+          const note = notes[date]
+          const lesson = lessonOn(date)
           const slots = categoriesOn(date, filter === '*' ? gumiCohortId : filter)
           const otherCategories = filter === '*' ? cohorts.flatMap(({ id, label }) => {
-            const entries = id === gumiCohortId ? [] : categoriesOn(date, id)
-            return entries.length ? [{ id, label, entries }] : []
+            if (id === gumiCohortId) return []
+            const entries = categoriesOn(date, id)
+            const otherLesson = lessonOn(date, id)
+            return entries.length || otherLesson ? [{ id, label, entries, otherLesson }] : []
           }) : []
           const categoryLabels = slots.map(({ time, label }) => time ? `${time} ${label}` : label)
           const exam = lesson && certificationPattern.test(lesson)
@@ -322,11 +326,11 @@ export default function Calendar({ mini = false, course, cohort, courses = [], t
               <div className="calendar-day-actions">
                 <button type="button" aria-current={date === today ? 'date' : undefined} aria-label={`${date} ${canEditCategories ? '직무 구분 편집' : '일정 추가'}`}>{day}</button>
               </div>
-              {(lesson || slots.length > 0) && <div className="calendar-cell-lesson">
+              {(lesson || slots.length > 0) && <div className={`calendar-cell-lesson${filter === busanCohortId && slots.length === 1 && !slots[0].time ? ` course-category--${slots[0].key}` : ''}`}>
                 <CategoryBadges slots={slots} />
                 {lesson && <LessonText lesson={lesson} />}
               </div>}
-              {otherCategories.map(({ id, label, entries }) => <div key={id} className="calendar-cell-lesson"><span>{label}</span><CategoryBadges slots={entries} /></div>)}
+              {otherCategories.map(({ id, label, entries, otherLesson }) => <div key={id} className="calendar-cell-lesson"><span>{label}</span><CategoryBadges slots={entries} />{otherLesson && <LessonText lesson={otherLesson} />}</div>)}
               {matches.map((event) => (
                 <button key={event.id} type="button" className={`calendar-event event-${event.color ?? 'blue'}`} title={event.memo ? `${eventLabel(event, date)}\n${event.memo}` : eventLabel(event, date)} onClick={(click) => { click.stopPropagation(); setCategoryDate(null); setEntry(event) }}
                   draggable={!event.repeat} onDragStart={(drag) => {
@@ -381,6 +385,7 @@ export default function Calendar({ mini = false, course, cohort, courses = [], t
       )}
       {hasCourseSheet && <a className="calendar-source" href={courseSheet} target="_blank" rel="noreferrer">교과목 캘린더 원본</a>}
       {!mini && categoryDate && <CategoryEditor key={activeCategoryKey} date={categoryDate}
+        categories={categoriesForCohort(filter)}
         initial={categorySettingsOn(categoryEdits, filter, categoryDate)}
         canReset={Object.hasOwn(categoryEdits, activeCategoryKey)} save={saveCategories}
         reset={() => saveCategories(null)} close={() => setCategoryDate(null)} addEvent={() => addEventOn(categoryDate)}
