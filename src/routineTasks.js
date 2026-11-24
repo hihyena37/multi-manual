@@ -4,6 +4,13 @@ export const dailyTasks = [
   { id: 'calls', title: '오전 9시 이후 입실하지 않은 참여청년 체크' },
 ]
 
+export const weekdays = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일']
+
+export function weekdayOrder({ badge }) {
+  const index = weekdays.indexOf(badge)
+  return index === -1 ? weekdays.length : index
+}
+
 export const weeklyTasks = [
   { id: 'pre-survey', title: '사전설문', badge: '월요일', hint: '시간표에서 실시 여부 확인' },
   { id: 'satisfaction', title: '만족도설문', badge: '금요일', hint: '매주 실시' },

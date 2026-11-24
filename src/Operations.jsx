@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, ExternalLink, FileText, Folder, Link2 } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, ExternalLink, FileText, Folder, Link2 } from 'lucide-react'
 import { cohortLabel } from './courses'
 import { downloadOperationFile, readOperationFiles, removeOperationFiles, storeOperationFiles } from './operationFiles'
 
@@ -142,6 +142,7 @@ export default function Operations({ course, cohort, sharedKey, resourceKey }) {
   const visible = term
     ? availableItems.filter((item) => [item.name, item.content].some((value) => value?.toLowerCase().includes(term)))
     : availableItems.filter((item) => item.parentId === folderId)
+  const siblingFolders = term ? [] : visible.filter((item) => item.kind === 'folder')
 
   function open(id) {
     setFolderId(id)
@@ -149,12 +150,12 @@ export default function Operations({ course, cohort, sharedKey, resourceKey }) {
     setDraft(null)
   }
 
-  function commit(next) {
+  function commit(next, closeDraft = true) {
     try {
       localStorage.setItem(key, JSON.stringify(next))
       setItems(next)
       if (folderId && !next.some((item) => item.id === folderId)) setFolderId(null)
-      setDraft(null)
+      if (closeDraft) setDraft(null)
       setError(false)
       return true
     } catch {
@@ -167,6 +168,17 @@ export default function Operations({ course, cohort, sharedKey, resourceKey }) {
     commit(item.id
       ? items.map((entry) => entry.id === item.id ? item : entry)
       : [...items, { ...item, id: crypto.randomUUID() }])
+  }
+
+  function moveFolder(item, offset) {
+    const position = siblingFolders.indexOf(item)
+    const neighbor = siblingFolders[position + offset]
+    if (position < 0 || !neighbor) return
+
+    const next = [...items]
+    next[items.indexOf(item)] = neighbor
+    next[items.indexOf(neighbor)] = item
+    commit(next, false)
   }
 
   async function upload(event) {
@@ -253,6 +265,7 @@ export default function Operations({ course, cohort, sharedKey, resourceKey }) {
             {visible.map((item) => {
               const Icon = item.kind === 'folder' ? Folder : item.kind === 'link' ? Link2 : FileText
               const url = item.kind === 'link' ? safeLink(item.content) : ''
+              const folderPosition = siblingFolders.indexOf(item)
               return (
                 <li key={item.id} className="operations-item">
                   <Icon size={20} aria-hidden="true" />
@@ -266,6 +279,12 @@ export default function Operations({ course, cohort, sharedKey, resourceKey }) {
                     {item.kind === 'note' && (item.formatted ? <ManualText content={item.content} /> : <p className="operations-note">{item.content}</p>)}
                   </div>
                   <div className="operations-actions">
+                    {folderPosition >= 0 && <>
+                      <button type="button" disabled={folderPosition === 0} onClick={() => moveFolder(item, -1)}
+                        aria-label={`${item.name} 위로 이동`} title="위로 이동"><ArrowUp size={16} aria-hidden="true" /></button>
+                      <button type="button" disabled={folderPosition === siblingFolders.length - 1} onClick={() => moveFolder(item, 1)}
+                        aria-label={`${item.name} 아래로 이동`} title="아래로 이동"><ArrowDown size={16} aria-hidden="true" /></button>
+                    </>}
                     {item.kind === 'file'
                       ? <button type="button" onClick={() => downloadOperationFile(item)} aria-label={`${item.name} 다운로드`}>다운로드</button>
                       : <button type="button" onClick={() => setDraft(item)} aria-label={`${item.name} 수정`}>수정</button>}

@@ -10,7 +10,7 @@ import { checklistOrderKey, loadChecklistOrder, mergeChecklistOrder } from './ch
 import { eventsOnDate, loadEvents } from './calendarEvents'
 import { courseSheetSchedule } from './courseSheetSchedule'
 import { cohortLabel, gumiCohortId } from './courses'
-import { attendanceDocuments, dailyTasks, periodTasks, weeklyTasks, weekRange } from './routineTasks'
+import { attendanceDocuments, dailyTasks, periodTasks, weekdayOrder, weekdays, weeklyTasks, weekRange } from './routineTasks'
 import { occursOn, repeatOptions, shiftDate } from './dateRecurrence'
 
 const storageKey = 'work-manual.tasks.v1'
@@ -73,7 +73,7 @@ function HiddenTasks({ items, show }) {
   )
 }
 
-function TaskRow({ task, update, remove, checked, toggle, rowProps, handle, hide }) {
+function TaskRow({ task, update, remove, checked, toggle, rowProps, handle, hide, weekdayBadge }) {
   const [editing, setEditing] = useState(false)
 
   function save(event) {
@@ -86,7 +86,7 @@ function TaskRow({ task, update, remove, checked, toggle, rowProps, handle, hide
   }
 
   return (
-    <li className="task-row" {...rowProps}>
+    <li className={weekdayBadge ? 'task-row task-schedule' : 'task-row'} {...rowProps}>
       {handle}
       {editing ? (
         <form className="task-form" onSubmit={save}>
@@ -104,9 +104,10 @@ function TaskRow({ task, update, remove, checked, toggle, rowProps, handle, hide
             <span className="checklist-icon" aria-hidden="true"><ListTodo size={16} /></span>
             <span className={checked ? 'task-done' : undefined}>{task.title}</span>
           </label>
+          {weekdayBadge && <span className="task-scope" data-weekday={weekdayBadge}>{weekdayBadge}</span>}
           <div className="task-actions">
             <HideTask title={task.title} hide={hide} />
-            {!checked && !task.repeat && <button type="button" onClick={() => update({ date: tomorrow(task.date) })}>내일로</button>}
+            {!weekdayBadge && !checked && !task.repeat && <button type="button" onClick={() => update({ date: tomorrow(task.date) })}>내일로</button>}
             <button type="button" onClick={() => setEditing(true)}>수정</button>
             <button type="button" onClick={remove}>삭제</button>
           </div>
@@ -156,7 +157,7 @@ function RoutineForm({ item, weekly, save, cancel }) {
             <label>요일
               <select name="badge" defaultValue={item?.badge ?? ''}>
                 <option value="">요일 지정 없음</option>
-                {['월', '화', '수', '목', '금', '토', '일'].map((day) => <option key={day}>{day}요일</option>)}
+                {weekdays.map((day) => <option key={day}>{day}</option>)}
               </select>
             </label>
           )}
@@ -312,9 +313,14 @@ export default function Home({ course, cohort }) {
   const nextWeekItems = tasks.filter((task) => !task.scheduleId && task.cohortId === cohort?.id
     && task.date >= nextWeekStart && task.date <= nextWeekEnd)
     .sort((a, b) => a.date.localeCompare(b.date))
-  const visibleTasks = tasks.filter((task) => !task.scheduleId && occursOn(task.date, today, task.repeat) && (
+  const datedTasks = tasks.filter((task) => !task.scheduleId && (
     (task.cohortId ?? gumiCohortId) === cohort?.id
   ))
+  const visibleTasks = datedTasks.filter((task) => occursOn(task.date, today, task.repeat))
+  // Older next-week entries were stored in the same format as one-off daily tasks.
+  const thisWeekTasks = datedTasks.filter((task) => (task.planned || !task.repeat)
+    && task.date >= weekStart && task.date <= weekEnd)
+    .map((task) => ({ ...task, badge: weekdays[(new Date(task.date).getUTCDay() + 6) % 7] }))
   const checkedOn = (date) => new Set(tasks.filter((task) => task.date === date && task.scheduleId).map((task) => task.scheduleId))
   const checkedToday = checkedOn(today)
   const checkedWeek = checkedOn(weekStart)
@@ -322,10 +328,9 @@ export default function Home({ course, cohort }) {
   const visibilityKey = (id) => `hidden:${scope}:${id}`
   const isHidden = (item, saved) => saved.has(visibilityKey(item.id))
   const allWeekly = scopedItems(weeklyTasks, 'week', true)
-  const weekday = ['일', '월', '화', '수', '목', '금', '토'][new Date(today).getUTCDay()] + '요일'
+  const weekday = weekdays[(new Date(today).getUTCDay() + 6) % 7]
   const dueWeekly = allWeekly.filter((item) => item.badge === weekday)
   const dueWeeklyIds = new Set(dueWeekly.map(({ id }) => id))
-  const remainingWeekly = allWeekly.filter(({ id }) => !dueWeeklyIds.has(id))
   const dailyCopies = (items) => items.flatMap((item) => {
     const dailyEditKey = `${scope}:day-copy:${today}:${item.id}`
     const fields = routineEdits[dailyEditKey]
@@ -341,7 +346,8 @@ export default function Home({ course, cohort }) {
   const dailyChecks = (id) => dueWeeklyIds.has(id) ? checkedWeek : checkedToday
   const dailyActionDate = (id) => dueWeeklyIds.has(id) ? weekStart : today
   const daily = allDaily.filter((item) => !isHidden(item, dailyChecks(item.id)))
-  const weekly = remainingWeekly.filter((item) => !isHidden(item, checkedWeek))
+  const weeklyEntries = [...allWeekly, ...thisWeekTasks]
+  const weekly = weeklyEntries.filter((item) => !isHidden(item, checkedWeek))
   const documents = allDocuments.filter((item) => !isHidden(item, checkedUnit))
   const unit = allUnit.filter((item) => !isHidden(item, checkedUnit))
   const count = (items, checked) => items.filter(({ id }) => checked.has(id)).length
@@ -383,7 +389,7 @@ export default function Home({ course, cohort }) {
   function planNextWeek(title, date) {
     if (!cohort || date < nextWeekStart || date > nextWeekEnd) return false
     return commit([...tasks, {
-      id: crypto.randomUUID(), title, date, done: false, repeat: '',
+      id: crypto.randomUUID(), title, date, done: false, repeat: '', planned: true,
       courseId: course.id, cohortId: cohort.id,
     }])
   }
@@ -439,9 +445,26 @@ export default function Home({ course, cohort }) {
     }
   }
 
-  function toggleTask(task, done) {
-    if (task.repeat && task.date !== today) toggleSchedule(today, `task:${task.id}`, done)
+  function toggleTask(task, done, date = today) {
+    if (task.repeat && task.date !== date) toggleSchedule(date, `task:${task.id}`, done)
     else commit(tasks.map((entry) => entry.id === task.id ? { ...entry, done } : entry))
+  }
+
+  function renderTask(task, rowProps, handle, weeklyView = false) {
+    return (
+      <TaskRow
+        key={task.id}
+        task={task}
+        checked={weeklyView ? task.done : isDone(task)}
+        toggle={(done) => toggleTask(task, done, weeklyView ? task.date : today)}
+        rowProps={rowProps}
+        handle={handle}
+        weekdayBadge={weeklyView ? task.badge : undefined}
+        hide={() => setHidden(weeklyView ? weekStart : today, task.id, true)}
+        update={(fields) => commit(tasks.map((entry) => entry.id === task.id ? { ...entry, ...fields } : entry))}
+        remove={() => commit(tasks.filter(({ id }) => id !== task.id))}
+      />
+    )
   }
 
   return (
@@ -481,27 +504,18 @@ export default function Home({ course, cohort }) {
             {...sorting('daily')}
             render={(item, rowProps, handle) => item.Icon ? (
               <ChecklistRow key={item.id} item={item} done={dailyChecks(item.id).has(item.id)} toggle={(id, done) => toggleSchedule(dailyActionDate(id), id, done)} rowProps={rowProps} handle={handle} hide={() => setHidden(dailyActionDate(item.id), item.id, true)} {...routineActions} />
-            ) : (
-              <TaskRow
-                key={item.id}
-                task={item}
-                checked={isDone(item)}
-                toggle={(done) => toggleTask(item, done)}
-                rowProps={rowProps}
-                handle={handle}
-                hide={() => setHidden(today, item.id, true)}
-                update={(fields) => commit(tasks.map((entry) => entry.id === item.id ? { ...entry, ...fields } : entry))}
-                remove={() => commit(tasks.filter(({ id }) => id !== item.id))}
-              />
-            )}
+            ) : renderTask(item, rowProps, handle)}
           />
         <HiddenTasks items={allDaily.filter((item) => isHidden(item, dailyChecks(item.id)))} show={(id) => setHidden(dailyActionDate(id), id, false)} />
       </section>
       <section className="management-card home-checklist" aria-labelledby="weekly-title">
-        <ChecklistHeading id="weekly-title" title="주간 할 일" complete={count(weekly, checkedWeek)} total={weekly.length} range={`${weekStart} ~ ${weekEnd}`} />
+        <ChecklistHeading id="weekly-title" title="주간 할 일" complete={weekly.filter((item) => item.Icon ? checkedWeek.has(item.id) : item.done).length} total={weekly.length} range={`${weekStart} ~ ${weekEnd}`} />
         {cohort && <RoutineAdder key={`week:${cohort.id}`} weekly save={(fields) => editRoutine(`${scope}:week:custom-${crypto.randomUUID()}`, fields)} />}
-        <RoutineList key={scope} items={weekly} checked={checkedWeek} toggle={(id, done) => toggleSchedule(weekStart, id, done)} hide={(id) => setHidden(weekStart, id, true)} {...routineActions} {...sorting('weekly')} />
-        <HiddenTasks items={remainingWeekly.filter((item) => isHidden(item, checkedWeek))} show={(id) => setHidden(weekStart, id, false)} />
+        <SortableChecklist key={scope} items={weekly} groupOrder={weekdayOrder} {...sorting('weekly')}
+          render={(item, rowProps, handle) => item.Icon ? (
+            <ChecklistRow key={item.id} item={item} done={checkedWeek.has(item.id)} toggle={(id, done) => toggleSchedule(weekStart, id, done)} rowProps={rowProps} handle={handle} hide={() => setHidden(weekStart, item.id, true)} {...routineActions} />
+          ) : renderTask(item, rowProps, handle, true)} />
+        <HiddenTasks items={weeklyEntries.filter((item) => isHidden(item, checkedWeek))} show={(id) => setHidden(weekStart, id, false)} />
       </section>
       <section className="management-card home-checklist" aria-labelledby="unit-title">
         {cohort ? (

@@ -673,8 +673,9 @@ button { font: inherit; }
   cursor: grab;
   user-select: none;
 }
-.task-drag:hover, .task-drag:focus-visible { border-color: var(--border); background: #eaf1fc; }
-.task-drag:active { cursor: grabbing; }
+.task-drag:enabled:hover, .task-drag:focus-visible { border-color: var(--border); background: #eaf1fc; }
+.task-drag:enabled:active { cursor: grabbing; }
+.task-drag:disabled { cursor: default; opacity: .5; }
 .task-row[data-drop-target] { background: #f3f7ff; }
 .task-row[data-drop-target="before"] { box-shadow: inset 0 3px var(--blue); }
 .task-row[data-drop-target="after"] { box-shadow: inset 0 -3px var(--blue); }
