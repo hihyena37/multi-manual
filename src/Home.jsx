@@ -421,10 +421,11 @@ export default function Home({ course, cohort }) {
     }
   }
 
-  function removeRoutine({ templateKey, dailyEditKey, title, hint = '', badge = '' }) {
-    const scopeLabel = dailyEditKey ? '오늘의 일일 할 일' : '이 과정의 체크리스트'
+  function removeRoutine({ templateKey, dailyEditKey, weekly, title, hint = '', badge = '' }) {
+    const removeKey = weekly ? templateKey : dailyEditKey ?? templateKey
+    const scopeLabel = weekly ? '일일 할 일과 주간 할 일' : dailyEditKey ? '오늘의 일일 할 일' : '이 과정의 체크리스트'
     if (window.confirm(`‘${title}’ 항목을 ${scopeLabel}에서 삭제할까요?`)) {
-      editRoutine(dailyEditKey ?? templateKey, { title, hint, badge, deleted: true })
+      editRoutine(removeKey, { title, hint, badge, deleted: true })
     }
   }
 
